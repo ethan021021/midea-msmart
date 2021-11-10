@@ -1,4 +1,3 @@
-
 import logging
 import time
 from enum import Enum
@@ -8,21 +7,20 @@ from msmart.command import set_command
 from msmart.lan import lan
 from msmart.packet_builder import packet_builder
 
-VERSION = '0.1.35'
+VERSION = "0.1.35"
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def convert_device_id_hex(device_id: int):
-    return device_id.to_bytes(6, 'little').hex()
+    return device_id.to_bytes(6, "little").hex()
 
 
 def convert_device_id_int(device_id: str):
-    return int.from_bytes(bytes.fromhex(device_id), 'little')
+    return int.from_bytes(bytes.fromhex(device_id), "little")
 
 
 class device:
-
     def __init__(self, device_ip: str, device_id: int, device_port: int):
         # device_id = convert_device_id_hex(device_id)
         self._lan_service = lan(device_ip, device_id, device_port)
@@ -30,7 +28,7 @@ class device:
         self._id = device_id
         self._port = device_port
         self._keep_last_known_online_state = False
-        self._type = 0xac
+        self._type = 0xAC
         self._updating = False
         self._defer_update = False
         self._half_temp_step = False
@@ -47,18 +45,18 @@ class device:
             self._key = bytearray.fromhex(key)
             return self._authenticate()
         return False
-        
+
     def _authenticate(self):
         return self._lan_service.authenticate(self._token, self._key)
 
     def set_device_detail(self, device_detail: dict):
-        self._id = device_detail['id']
-        self._name = device_detail['name']
-        self._model_number = device_detail['modelNumber']
-        self._serial_number = device_detail['sn']
-        self._type = int(device_detail['type'], 0)
-        self._active = device_detail['activeStatus'] == '1'
-        self._online = device_detail['onlineStatus'] == '1'
+        self._id = device_detail["id"]
+        self._name = device_detail["name"]
+        self._model_number = device_detail["modelNumber"]
+        self._serial_number = device_detail["sn"]
+        self._type = int(device_detail["type"], 0)
+        self._active = device_detail["activeStatus"] == "1"
+        self._online = device_detail["onlineStatus"] == "1"
 
     def refresh(self):
         pass
@@ -116,7 +114,6 @@ class device:
 
 
 class air_conditioning_device(device):
-
     class fan_speed_enum(Enum):
         Auto = 102
         Full = 100
@@ -131,7 +128,7 @@ class air_conditioning_device(device):
 
         @staticmethod
         def get(value):
-            if(value in air_conditioning_device.fan_speed_enum._value2member_map_):
+            if value in air_conditioning_device.fan_speed_enum._value2member_map_:
                 return air_conditioning_device.fan_speed_enum(value)
             _LOGGER.debug("Unknown Fan Speed: {}".format(value))
             return air_conditioning_device.fan_speed_enum.Auto
@@ -145,11 +142,16 @@ class air_conditioning_device(device):
 
         @staticmethod
         def list():
-            return list(map(lambda c: c.name, air_conditioning_device.operational_mode_enum))
+            return list(
+                map(lambda c: c.name, air_conditioning_device.operational_mode_enum)
+            )
 
         @staticmethod
         def get(value):
-            if(value in air_conditioning_device.operational_mode_enum._value2member_map_):
+            if (
+                value
+                in air_conditioning_device.operational_mode_enum._value2member_map_
+            ):
                 return air_conditioning_device.operational_mode_enum(value)
             _LOGGER.debug("Unknown Operational Mode: {}".format(value))
             return air_conditioning_device.operational_mode_enum.fan_only
@@ -166,7 +168,7 @@ class air_conditioning_device(device):
 
         @staticmethod
         def get(value):
-            if(value in air_conditioning_device.swing_mode_enum._value2member_map_):
+            if value in air_conditioning_device.swing_mode_enum._value2member_map_:
                 return air_conditioning_device.swing_mode_enum(value)
             _LOGGER.debug("Unknown Swing Mode: {}".format(value))
             return air_conditioning_device.swing_mode_enum.Off
@@ -189,7 +191,7 @@ class air_conditioning_device(device):
         self._active = True
         self._indoor_temperature = 0.0
         self._outdoor_temperature = 0.0
-    
+
     def __str__(self):
         return str(self.__dict__)
 
@@ -202,7 +204,10 @@ class air_conditioning_device(device):
         pkt_builder.set_command(cmd)
         data = pkt_builder.finalize()
         _LOGGER.debug(
-            "pkt_builder: {}:{} len: {} data: {}".format(self.ip, self.port, len(data), data.hex()))
+            "pkt_builder: {}:{} len: {} data: {}".format(
+                self.ip, self.port, len(data), data.hex()
+            )
+        )
         send_time = time.time()
         if self._protocol_version == 3:
             responses = self._lan_service.appliance_transparent_send_8370(data)
@@ -210,36 +215,47 @@ class air_conditioning_device(device):
             responses = self._lan_service.appliance_transparent_send(data)
         request_time = round(time.time() - send_time, 2)
         _LOGGER.debug(
-            "Got responses from {}:{} Version: {} Count: {} Spend time: {}".format(self.ip, self.port, self._protocol_version, len(responses), request_time))
+            "Got responses from {}:{} Version: {} Count: {} Spend time: {}".format(
+                self.ip, self.port, self._protocol_version, len(responses), request_time
+            )
+        )
         if len(responses) == 0:
             _LOGGER.warn(
-            "Got Null from {}:{} Version: {} Count: {} Spend time: {}".format(self.ip, self.port, self._protocol_version, len(responses), request_time))
+                "Got Null from {}:{} Version: {} Count: {} Spend time: {}".format(
+                    self.ip,
+                    self.port,
+                    self._protocol_version,
+                    len(responses),
+                    request_time,
+                )
+            )
             self._active = False
             self._support = False
         for response in responses:
             self._process_response(response)
 
     def _process_response(self, data):
-        _LOGGER.debug(
-            "Update from {}:{} {}".format(self.ip, self.port, data.hex()))
+        _LOGGER.debug("Update from {}:{} {}".format(self.ip, self.port, data.hex()))
         if len(data) > 0:
             self._online = True
             self._active = True
-            if data == b'ERROR':
+            if data == b"ERROR":
                 self._support = False
-                _LOGGER.warn(
-                    "Got ERROR from {}, {}".format(self.ip, self.id))
+                _LOGGER.warn("Got ERROR from {}, {}".format(self.ip, self.id))
                 return
             response = appliance_response(data)
             self._defer_update = False
             self._support = True
             if not self._defer_update:
-                if data[0xa] == 0xc0:
+                if data[0xA] == 0xC0:
                     self.update(response)
-                if data[0xa] == 0xa1 or data[0xa] == 0xa0:
-                    '''only update indoor_temperature and outdoor_temperature'''
-                    _LOGGER.debug("Update - Special Respone. {}:{} {}".format(
-                        self.ip, self.port, data[0xa:].hex()))
+                if data[0xA] == 0xA1 or data[0xA] == 0xA0:
+                    """only update indoor_temperature and outdoor_temperature"""
+                    _LOGGER.debug(
+                        "Update - Special Respone. {}:{} {}".format(
+                            self.ip, self.port, data[0xA:].hex()
+                        )
+                    )
                     pass
                     # self.update_special(response)
                 self._defer_update = False
@@ -259,7 +275,7 @@ class air_conditioning_device(device):
             cmd.eco_mode = self._eco_mode
             cmd.turbo_mode = self._turbo_mode
             # pkt_builder = packet_builder(self.id)
-#            cmd.night_light = False
+            #            cmd.night_light = False
             cmd.fahrenheit = self.fahrenheit_unit
             self._send_cmd(cmd)
         finally:
@@ -270,28 +286,27 @@ class air_conditioning_device(device):
         self._power_state = res.power_state
         self._target_temperature = res.target_temperature
         self._operational_mode = air_conditioning_device.operational_mode_enum.get(
-            res.operational_mode)
-        self._fan_speed = air_conditioning_device.fan_speed_enum.get(
-            res.fan_speed)
-        self._swing_mode = air_conditioning_device.swing_mode_enum.get(
-            res.swing_mode)
+            res.operational_mode
+        )
+        self._fan_speed = air_conditioning_device.fan_speed_enum.get(res.fan_speed)
+        self._swing_mode = air_conditioning_device.swing_mode_enum.get(res.swing_mode)
         self._eco_mode = res.eco_mode
         self._turbo_mode = res.turbo_mode
         indoor_temperature = res.indoor_temperature
-        if indoor_temperature != 0xff:
+        if indoor_temperature != 0xFF:
             self._indoor_temperature = indoor_temperature
         outdoor_temperature = res.outdoor_temperature
-        if outdoor_temperature != 0xff:
+        if outdoor_temperature != 0xFF:
             self._outdoor_temperature = outdoor_temperature
         self._on_timer = res.on_timer
         self._off_timer = res.off_timer
 
     def update_special(self, res: appliance_response):
         indoor_temperature = res.indoor_temperature
-        if indoor_temperature != 0xff:
+        if indoor_temperature != 0xFF:
             self._indoor_temperature = indoor_temperature
         outdoor_temperature = res.outdoor_temperature
-        if outdoor_temperature != 0xff:
+        if outdoor_temperature != 0xFF:
             self._outdoor_temperature = outdoor_temperature
 
     @property
@@ -316,10 +331,14 @@ class air_conditioning_device(device):
 
     @property
     def target_temperature(self):
-        return self._target_temperature
+        fahrenheit = (self._target_temperature * 1.8) + 32
+        rounded = round(fahrenheit * 2) / 2
+        return rounded
 
     @target_temperature.setter
-    def target_temperature(self, temperature_celsius: float): # the implementation later rounds the temperature down to the nearest 0.5'C resolution.
+    def target_temperature(
+        self, temperature_celsius: float
+    ):  # the implementation later rounds the temperature down to the nearest 0.5'C resolution.
         if self._updating:
             self._defer_update = True
         self._target_temperature = temperature_celsius
@@ -376,7 +395,9 @@ class air_conditioning_device(device):
 
     @property
     def indoor_temperature(self):
-        return self._indoor_temperature
+        fahrenheit = (self._indoor_temperature * 1.8) + 32
+        rounded = round(fahrenheit * 2) / 2
+        return rounded
 
     @property
     def outdoor_temperature(self):
@@ -392,7 +413,6 @@ class air_conditioning_device(device):
 
 
 class unknown_device(device):
-
     def __init__(self, lan_service: lan):
         super().__init__(lan_service)
 
@@ -406,17 +426,21 @@ class unknown_device(device):
         if len(data) > 0:
             self._online = True
             response = appliance_response(data)
-            _LOGGER.debug("Decoded Data: {}".format({
-                'prompt_tone': response.prompt_tone,
-                'target_temperature': response.target_temperature,
-                'indoor_temperature': response.indoor_temperature,
-                'outdoor_temperature': response.outdoor_temperature,
-                'operational_mode': response.operational_mode,
-                'fan_speed': response.fan_speed,
-                'swing_mode': response.swing_mode,
-                'eco_mode': response.eco_mode,
-                'turbo_mode': response.turbo_mode
-            }))
+            _LOGGER.debug(
+                "Decoded Data: {}".format(
+                    {
+                        "prompt_tone": response.prompt_tone,
+                        "target_temperature": response.target_temperature,
+                        "indoor_temperature": response.indoor_temperature,
+                        "outdoor_temperature": response.outdoor_temperature,
+                        "operational_mode": response.operational_mode,
+                        "fan_speed": response.fan_speed,
+                        "swing_mode": response.swing_mode,
+                        "eco_mode": response.eco_mode,
+                        "turbo_mode": response.turbo_mode,
+                    }
+                )
+            )
         elif not self._keep_last_known_online_state:
             self._online = False
 
@@ -425,6 +449,5 @@ class unknown_device(device):
 
 
 class dehumidifier_device(unknown_device):
-
     def __init__(self, lan_service: lan):
         super().__init__(lan_service)
